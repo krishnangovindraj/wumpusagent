@@ -34,9 +34,6 @@ search(Problem, Action):-	% Returns the action to take.
 formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED THIS )
 	writeln(formulate_goal).
 
-record_action(action):-		% Records whatever change occurs as a result of the action.
-	writeln(record_action).
-
 
 % Facts used
 %	* no_pit([X,Y]).
@@ -50,11 +47,11 @@ record_action(action):-		% Records whatever change occurs as a result of the act
 
 % Inference rules:
 %	OK([X,Y]) :- no_pit([X,Y]),no_wumpus([X,Y]).Tells you if [X,Y] is safe.
-%	aiming_at_wumpus(Location,Orientation):- Tells if youre facing the wumpus
+%	aiming_at_wumpus(Location,Orientation):- True if youre facing the wumpus
 %	decide_action(Percept,Location,Orientation,Action):-
 %		decides the action. Multiple clauses which determine what to do.
 %       faceorgo(LocationStart, LocationFinal, Orientation, Action):- if facing the location, returns goforward; Else, rotate whichever way to face
-%       record_action(Action):-		% Records whatever change occurs as a result of the action.
+%       record_percept(Action):-		% Records the percepts / inferences from the percepts.
 
 
 % Search Strategy:
@@ -64,11 +61,16 @@ record_action(action):-		% Records whatever change occurs as a result of the act
 %       4. OK(East) && not visited(East) ->faceorgo(East)
 %       5. OK(South) && not visited(South) ->faceorgo(South)
 %       6. OK(West) && not visited(West) ->faceorgo(West)
-%	7. at(1,1) -> climb % Because if we reach here, then we ve explored everything.
+%		7. at(1,1) -> climb % Because if we reach here, then we ve explored everything.
 %       8. faceorgo(predecessor(current_location))). % Backtrack!
 
 
+%%%%%%%%%%%%%%
+% Actions
+%%%%%%%%%%%%%%
+
 	decide_action([_,_,yes,_,_],[X,Y],_,grab).
+
 	decide_action([yes,_,_,_,_],[X,Y],Orientation,shoot):-
 		aiming_at_wumpus([X,Y],Orientation).
 
@@ -106,78 +108,82 @@ record_action(action):-		% Records whatever change occurs as a result of the act
 
 
 
-% TO DO
 % Inferences:
+% TO DO
 %	aiming_at_wumpus
 
 
+	ok([X,Y]):-
+		no_pit([X,Y]),
+		no_wumpus([X,Y]).
 
-ok([X,Y]):-
-	no_pit([X,Y]),
-	no_wumpus([X,Y]).
 
-north([X,Y],[X1,Y1]):-
-	X1 is X,Y1 is Y+1.
+%
+% Utility functions related to motion
+%
+	north([X,Y],[X1,Y1]):-
+		X1 is X,Y1 is Y+1.
 
-south([X,Y],[X1,Y1]):-
-	X1 is X,Y1 is Y-1.
+	south([X,Y],[X1,Y1]):-
+		X1 is X,Y1 is Y-1.
 
-east([X,Y],[X1,Y1]):-
-	X1 is X+1,Y1 is Y.
+	east([X,Y],[X1,Y1]):-
+		X1 is X+1,Y1 is Y.
 
-west([X,Y],[X1,Y1]):-
-	X1 is X-1,Y1 is Y.
+	west([X,Y],[X1,Y1]):-
+		X1 is X-1,Y1 is Y.
 
-left(Orient1,Orient2):
-	Orient1=eastd, Orient2 is northd;
-	Orient1=westd, Orient2 is southd;
-	Orient1=northd, Orient2 is westd;
-	Orient1=southd, Orient2 is eastd.
+	left(eastd,northd).
+	left(northd,westd).
+	left(westd,southd).
+	left(southd,eastd).
 
-right(Orient1,Orient2):
-	Orient1=eastd, Orient2 is southd;
-	Orient1=westd, Orient2 is northd;
-	Orient1=northd, Orient2 is eastd;
-	Orient1=southd, Orient2 is westd.
+	right(eastd,southd).
+	right(southd,westd).
+	right(westd,northd).
+	right(northd,eastd).
 
-check_stench(no,[X,Y]):-
-	north([X,Y],[X1,Y1]),
-	assert(no_wumpus([X1,Y1])),
-	south([X,Y],[X2,Y2]),
-	assert(no_wumpus([X2,Y2])),
-	east([X,Y],[X3,Y3]),
-	assert(no_wumpus([X3,Y3])),
-	west([X,Y],[X4,Y4]),
-	assert(no_wumpus([X4,Y4])).
 
-check_stench(yes,[X,Y]).
+	get_block_orientation([X,Y], northd,[X1,Y1]):- north([X,Y],[X1,Y1]).
+	get_block_orientation([X,Y], eastd, [X1,Y1]):- east([X,Y], [X1,Y1]).
+	get_block_orientation([X,Y], southd,[X1,Y1]):- south([X,Y],[X1,Y1]).
+	get_block_orientation([X,Y], westd, [X1,Y1]):- west([X,Y], [X1,Y1]).
 
-check_breeze(no,[X,Y]):-
-	north([X,Y],[X1,Y1]),
-	assert(no_pit([X1,Y1])),
-	south([X,Y],[X2,Y2]),
-	assert(no_pit([X2,Y2])),
-	east([X,Y],[X3,Y3]),
-	assert(no_pit([X3,Y3])),
-	west([X,Y],[X4,Y4]),
-	assert(no_pit([X4,Y4])).
+%%%%%%%%%%%%%%%%%%%%%
+% Percept analysis %
+%%%%%%%%%%%%%%%%%%%%
+	check_stench(no,[X,Y]):-
+		north([X,Y],[X1,Y1]),
+		assert(no_wumpus([X1,Y1])),
+		south([X,Y],[X2,Y2]),
+		assert(no_wumpus([X2,Y2])),
+		east([X,Y],[X3,Y3]),
+		assert(no_wumpus([X3,Y3])),
+		west([X,Y],[X4,Y4]),
+		assert(no_wumpus([X4,Y4])).
 
-check_breeze(yes,[X,Y]).
+	check_stench(yes,[X,Y]).
 
-check_glitter(yes,[X,Y]):-
-	assert(got_gold([X,Y])).
+	check_breeze(no,[X,Y]):-
+		north([X,Y],[X1,Y1]),
+		assert(no_pit([X1,Y1])),
+		south([X,Y],[X2,Y2]),
+		assert(no_pit([X2,Y2])),
+		east([X,Y],[X3,Y3]),
+		assert(no_pit([X3,Y3])),
+		west([X,Y],[X4,Y4]),
+		assert(no_pit([X4,Y4])).
 
-check_glitter(no, [X,Y]).
+	check_breeze(yes,[X,Y]).
 
-get_block_orientation([X,Y],Orientation,[X1,Y1]):
-	Orientation = eastd, east([X,Y],[X1,Y1]);
-	Orientation = westd, west([X,Y],[X1,Y1]);
-	Orientation = northd, north([X,Y],[X1,Y1]);
-	Orientation = southd,  south([X,Y],[X1,Y1]).
+	check_glitter(yes,[X,Y]):-
+		assert(got_gold([X,Y])).
 
-check_bump(yes,[X,Y], Orientation):-
-	get_block_orientation([X,Y],Orientation,[X1,Y1]),
-	assert(out_of_bound([X1,Y1])).
+	check_glitter(no, [X,Y]).
 
-check_bump(no,[X,Y], Orientation).
+	check_bump(yes,[X,Y], Orientation):-
+		get_block_orientation([X,Y],Orientation,[X1,Y1]),
+		assert(out_of_bound([X1,Y1])).
+
+	check_bump(no,[X,Y], Orientation).
 
