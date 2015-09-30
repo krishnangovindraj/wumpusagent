@@ -1,15 +1,37 @@
 % Run using test_agent("random_worlds.pl",Score, Time).
+% test_agent("chickenworld.pl",Score, Time).
 
 init_agent:- % Populates our knowledge base with basic information ( location, orientation, arrowcount ).
-	writeln(init),
-	restart_agent. % Dummy
+	restart_agent,
+	asserta(action_sequence(climbdown)),
+	assert(cur_loc([1,1])),
+	assert(cur_orient(eastd)),
+	assert(visited([1,1])),
+	assert(out_of_bound([0,0])),
+	writeln(init).
+
 
 restart_agent:- % Clears our knowledgeBase.
+	retractall(no_arrows),
+	retractall(got_gold(_)),
+
+	retractall(no_wumpus(_)),
+	retractall(no_pit(_)),
+	retractall(out_of_bound(_)),
+	retractall(predecessor(_,_)),
+	retractall(action_sequence(_)),
+	retractall(cur_loc(_)),
+	retractall(cur_orient(_)),
 	writeln(reset).
 
-
-% Dummy agent who just climbs
-simple_problem_solving_agent(Percepts, climb):-	
+	% Dummy agent who just climbs
+simple_problem_solving_agent(Percepts, Action):-	action_sequence(PreviousAction),
+	cur_loc(PreviousLocation), cur_orient(PreviousOrientation),
+	update_state(Percepts, PreviousAction, PreviousLocation, PreviousOrientation),
+	cur_loc(CurrentLocation), cur_orient(CurrentOrientation),
+	record_percept(Percepts,CurrentLocation, CurrentOrientation),
+	decide_action(Percepts, CurrentLocation, CurrentOrientation, Action),
+	asserta(action_sequence(Action)),
 	writeln(taking_action).
 
 
@@ -18,17 +40,25 @@ record_percept([Stench,Breeze,Glitter,Bump,Scream],[X,Y],Orientation):-	% Takes 
 	check_breeze(Breeze,[X,Y]),
 	check_glitter(Glitter,[X,Y]),
 	check_bump(Bump,[X,Y],Orientation),
-	writeln(update_state).
+	writeln(record_percept).
 
-update_state([X,Y],Orientation,Action):-
-	Action=goforward, get_block_orientation([X,Y],Orientation,[X1,Y1]),asserta(cur_loc([X1,Y1])),asserta(cur_orient(Orientation));
+update_state([_,_,_,Bump,_],Action,[X,Y],Orientation):- % Take care of the bump
+	Action=goforward, Bump=yes,	get_block_orientation([X,Y],Orientation,[X1,Y1]),assert(out_of_bound([X1,Y1]));
+
+	Action=goforward, Bump=no,
+	get_block_orientation([X,Y],Orientation,[X1,Y1]),
+	asserta(cur_loc([X1,Y1])),asserta(cur_orient(Orientation)),
+	assert(visited([X1,Y1])),
+	assert(predecessor([X1,Y1],[X,Y]));
+
 	Action=turnleft,left(Orientation,Orient2),asserta(cur_orient(Orient2));
 	Action=turnright,right(Orientation,Orient2),asserta(cur_orient(Orient2));
 	Action=grab,asserta(got_gold([X,Y]));
 	Action=shoot,assert(no_arrows);
-	Action=climb.
+	Action=climb;
+	Action=climbdown.
 
-search(Problem, Action):-	% Returns the action to take. 
+search(Problem, Action):-	% Returns the action to take.
 	writeln(search).
 
 formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED THIS )
@@ -37,13 +67,13 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 
 % Facts used
 %	* no_pit([X,Y]).
-% 	* no_wumpus([X,Y]).
+%	* no_wumpus([X,Y]).
 %	* visited([X,Y]):- Tells you if [X,Y] has been visited.
 %	* current_location([X,Y]):- Gives you the current location
 %	* current_orientation(Angle):- Gives you your current orientation
 %	* predecessor([X,Y]):- Returns [X',Y'] which is the square you were at before exploring [X,Y]
 %       * wumpus_dead(TrueOrFalse).
- 
+
 
 % Inference rules:
 %	OK([X,Y]) :- no_pit([X,Y]),no_wumpus([X,Y]).Tells you if [X,Y] is safe.
@@ -69,42 +99,55 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 % Actions
 %%%%%%%%%%%%%%
 
-	decide_action([_,_,yes,_,_],[X,Y],_,grab).
+	decide_action([_,_,yes,_,_],[X,Y],_,grab):-
+		writeln(grab).
 
 	decide_action([yes,_,_,_,_],[X,Y],Orientation,shoot):-
-		aiming_at_wumpus([X,Y],Orientation).
+		aiming_at_wumpus([X,Y],Orientation),
+		writeln(shoot).
 
 	decide_action(_,[X,Y],Orientation,Action):-
-		OK(north([X,Y])),not visited(north([X,Y])),faceorgo([X,Y],Orientation,north([X,Y]),Action).
-	
-	decide_action(_,[X,Y],Orientation,Action):-
-		OK(east([X,Y])),not visited(east([X,Y])),faceorgo([X,Y],Orientation,east([X,Y]),Action).
+		north([X,Y],[X1,Y1]),
+		ok([X1,Y1]),not(visited([X1,Y1])),
+		faceorgo([X,Y],Orientation,[X1,Y1],Action).
 
 	decide_action(_,[X,Y],Orientation,Action):-
-		OK(south([X,Y])),not visited(south([X,Y])),faceorgo([X,Y],Orientation,south([X,Y]),Action).
-	
-	
+		east([X,Y],[X1,Y1]),
+		ok([X1,Y1]),not(visited([X1,Y1])),
+		faceorgo([X,Y],Orientation,[X1,Y1],Action).
+
 	decide_action(_,[X,Y],Orientation,Action):-
-		OK(west([X,Y])),not visited(west([X,Y])),faceorgo(west([X,Y]),Action).
-	
+		south([X,Y],[X1,Y1]),
+		ok([X1,Y1]),not(visited([X1,Y1])),
+		faceorgo( [X,Y], Orientation, [X1,Y1], Action ).
+
+	decide_action(_,[X,Y],Orientation,Action):-
+		west([X,Y],[X1,Y1]),
+		ok([X1,Y1]),not(visited([X1,Y1])),
+		faceorgo([X1,Y1],Orientation,[X1,Y1],Action).
+
 	% If execution reaches here, Then both [2,1], [1,2] are updated. Nothing to do but climb
-	decide_action(_,[1,1],_,climb).
-	
+        decide_action(_,[1,1],_,climb).
+
 	% Nothing to do. Go back
+
 	decide_action(_,[X,Y],Orientation,Action):-
-		faceorgo([X,Y],Orientation,predecessor([X,Y]),Action).
-	
+	        predecessor([X,Y],[PX1,PY1]),
+		faceorgo([X,Y],Orientation,[PX1,PY1],Action).
+
 
 	faceorgo([X,Y], Orientation, [X1,Y1], goforward):-
-		get_orientation_block([X,Y],Orientation,[X2,Y2]),		
-		[X1,Y1] = [X2,Y2].
-	
+		get_block_orientation([X,Y],Orientation,[X1,Y1]),
+		writeln(goforward).
+
 
 	faceorgo([X,Y], Orientation, [X1,Y1], turnleft):-
-		get_orientation_block([X,Y],left(Orientation),[X2,Y2]),		
-		[X1,Y1] = [X2,Y2].
-	
-	faceorgo([X,Y], Orientation, [X1,Y1], turnright).
+		left(Orientation, LeftOfOrientation),
+		get_block_orientation([X,Y],LeftOfOrientation,[X1,Y1]),
+		writeln(turnleft).
+
+        faceorgo([X,Y], Orientation, [X1,Y1], turnright):-
+		writeln(turnright).
 
 
 
@@ -115,7 +158,8 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 
 	ok([X,Y]):-
 		no_pit([X,Y]),
-		no_wumpus([X,Y]).
+		no_wumpus([X,Y]),
+		not(out_of_bound([X,Y])).
 
 
 %
@@ -187,3 +231,5 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 
 	check_bump(no,[X,Y], Orientation).
 
+aiming_at_wumpus([X,Y],Orientation):-
+	false.
