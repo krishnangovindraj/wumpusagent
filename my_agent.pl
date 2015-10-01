@@ -1,20 +1,33 @@
 % Run using test_agent("random_worlds.pl",Score, Time).
 % test_agent("chickenworld.pl",Score, Time).
 
+:- dynamic
+	no_pit/1,
+	no_wumpus/1,
+	visited/1,
+	out_of_bound/1,
+	predecessor/2,
+	action_sequence/1,
+	cur_loc/1,
+	cur_orient/1,
+	no_arrows/0,
+	got_gold/1.
+
+
 init_agent:- % Populates our knowledge base with basic information ( location, orientation, arrowcount ).
 	restart_agent,
 	asserta(action_sequence(climbdown)),
-	assert(cur_loc([1,1])),
-	assert(cur_orient(eastd)),
-	assert(visited([1,1])),
-	assert(out_of_bound([0,0])),
+	assert_once(cur_loc([1,1])),
+	assert_once(cur_orient(eastd)),
+	assert_once(visited([1,1])),
+	assert_once(out_of_bound([0,0])),
 	writeln(init).
 
 
 restart_agent:- % Clears our knowledgeBase.
 	retractall(no_arrows),
 	retractall(got_gold(_)),
-
+	retractall(visited(_)),
 	retractall(no_wumpus(_)),
 	retractall(no_pit(_)),
 	retractall(out_of_bound(_)),
@@ -43,18 +56,18 @@ record_percept([Stench,Breeze,Glitter,Bump,Scream],[X,Y],Orientation):-	% Takes 
 	writeln(record_percept).
 
 update_state([_,_,_,Bump,_],Action,[X,Y],Orientation):- % Take care of the bump
-	Action=goforward, Bump=yes,	get_block_orientation([X,Y],Orientation,[X1,Y1]),assert(out_of_bound([X1,Y1]));
+	Action=goforward, Bump=yes,	get_block_orientation([X,Y],Orientation,[X1,Y1]),assert_once(visited([X1,Y1])),assert_once(out_of_bound([X1,Y1])),writeln([outofbounds,X1,Y1]);
 
 	Action=goforward, Bump=no,
 	get_block_orientation([X,Y],Orientation,[X1,Y1]),
 	asserta(cur_loc([X1,Y1])),asserta(cur_orient(Orientation)),
-	assert(visited([X1,Y1])),
-	assert(predecessor([X1,Y1],[X,Y]));
+	assert_once(visited([X1,Y1])),
+	assert_once(predecessor([X1,Y1],[X,Y]));
 
 	Action=turnleft,left(Orientation,Orient2),asserta(cur_orient(Orient2));
 	Action=turnright,right(Orientation,Orient2),asserta(cur_orient(Orient2));
 	Action=grab,asserta(got_gold([X,Y]));
-	Action=shoot,assert(no_arrows);
+	Action=shoot,assert_once(no_arrows);
 	Action=climb;
 	Action=climbdown.
 
@@ -99,6 +112,7 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 % Actions
 %%%%%%%%%%%%%%
 
+
 	decide_action([_,_,yes,_,_],[X,Y],_,grab):-
 		writeln(grab).
 
@@ -109,22 +123,26 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 	decide_action(_,[X,Y],Orientation,Action):-
 		north([X,Y],[X1,Y1]),
 		ok([X1,Y1]),not(visited([X1,Y1])),
-		faceorgo([X,Y],Orientation,[X1,Y1],Action).
+		faceorgo([X,Y],Orientation,[X1,Y1],Action),
+		writeln(gonorth).
 
 	decide_action(_,[X,Y],Orientation,Action):-
 		east([X,Y],[X1,Y1]),
 		ok([X1,Y1]),not(visited([X1,Y1])),
-		faceorgo([X,Y],Orientation,[X1,Y1],Action).
+		faceorgo([X,Y],Orientation,[X1,Y1],Action),
+		writeln(goeast).
 
 	decide_action(_,[X,Y],Orientation,Action):-
 		south([X,Y],[X1,Y1]),
 		ok([X1,Y1]),not(visited([X1,Y1])),
-		faceorgo( [X,Y], Orientation, [X1,Y1], Action ).
+		faceorgo( [X,Y], Orientation, [X1,Y1], Action ),
+		writeln(gosouth).
 
 	decide_action(_,[X,Y],Orientation,Action):-
 		west([X,Y],[X1,Y1]),
 		ok([X1,Y1]),not(visited([X1,Y1])),
-		faceorgo([X1,Y1],Orientation,[X1,Y1],Action).
+		faceorgo([X,Y],Orientation,[X1,Y1],Action),
+		writeln(gowest).
 
 	% If execution reaches here, Then both [2,1], [1,2] are updated. Nothing to do but climb
         decide_action(_,[1,1],_,climb).
@@ -157,9 +175,10 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 
 
 	ok([X,Y]):-
-		no_pit([X,Y]),
-		no_wumpus([X,Y]),
-		not(out_of_bound([X,Y])).
+		% not(out_of_bound([X,Y])),
+                no_pit([X,Y]),
+		no_wumpus([X,Y]).
+
 
 
 %
@@ -198,38 +217,61 @@ formulate_goal(Goal):-		% Sets the goal. Goal E {explore, gohome} ( WE DONT NEED
 %%%%%%%%%%%%%%%%%%%%
 	check_stench(no,[X,Y]):-
 		north([X,Y],[X1,Y1]),
-		assert(no_wumpus([X1,Y1])),
+		assert_once(no_wumpus([X1,Y1])),
 		south([X,Y],[X2,Y2]),
-		assert(no_wumpus([X2,Y2])),
+		assert_once(no_wumpus([X2,Y2])),
 		east([X,Y],[X3,Y3]),
-		assert(no_wumpus([X3,Y3])),
+		assert_once(no_wumpus([X3,Y3])),
 		west([X,Y],[X4,Y4]),
-		assert(no_wumpus([X4,Y4])).
+		assert_once(no_wumpus([X4,Y4])).
 
 	check_stench(yes,[X,Y]).
 
 	check_breeze(no,[X,Y]):-
 		north([X,Y],[X1,Y1]),
-		assert(no_pit([X1,Y1])),
+		assert_once(no_pit([X1,Y1])),
 		south([X,Y],[X2,Y2]),
-		assert(no_pit([X2,Y2])),
+		assert_once(no_pit([X2,Y2])),
 		east([X,Y],[X3,Y3]),
-		assert(no_pit([X3,Y3])),
+		assert_once(no_pit([X3,Y3])),
 		west([X,Y],[X4,Y4]),
-		assert(no_pit([X4,Y4])).
+		assert_once(no_pit([X4,Y4])).
 
 	check_breeze(yes,[X,Y]).
 
 	check_glitter(yes,[X,Y]):-
-		assert(got_gold([X,Y])).
+		assert_once(got_gold([X,Y])).
 
 	check_glitter(no, [X,Y]).
 
 	check_bump(yes,[X,Y], Orientation):-
 		get_block_orientation([X,Y],Orientation,[X1,Y1]),
-		assert(out_of_bound([X1,Y1])).
+		assert_once(out_of_bound([X1,Y1])).
 
 	check_bump(no,[X,Y], Orientation).
 
 aiming_at_wumpus([X,Y],Orientation):-
 	false.
+
+
+
+assert_once(SomeFact):-
+	SomeFact.
+
+assert_once(SomeFact):-
+	assert(SomeFact).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
